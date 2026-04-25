@@ -12,7 +12,8 @@ router.get("/", auth(), async (_req, res) => {
 router.post("/", auth(), async (req, res) => {
   const payload = {
     date: req.body.date,
-    soleType: req.body.soleType,
+    articleId: req.body.articleId,
+    articleName: req.body.articleName || req.body.articleNumber || "",
     quantity: Number(req.body.quantity || 0),
     notes: req.body.notes || "",
     createdBy: req.user.sub

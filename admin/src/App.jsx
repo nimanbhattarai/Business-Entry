@@ -17,6 +17,7 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [dashboard, setDashboard] = useState(null);
   const [report, setReport] = useState(null);
+  const [inventory, setInventory] = useState(null);
 
   const logout = () => {
     localStorage.removeItem("soletrack_admin_token");
@@ -52,6 +53,8 @@ export default function App() {
       const res = await authFetch(`${API}/dashboard`);
       const data = await res.json();
       setDashboard(data);
+      const invRes = await authFetch(`${API}/inventory`);
+      setInventory(await invRes.json());
     } catch (e) {
       alert(e.message);
     }
@@ -97,6 +100,16 @@ export default function App() {
           <Card title="Sold Today" value={dashboard.totalSoldToday} />
           <Card title="Revenue" value={dashboard.totalRevenue} />
           <Card title="Profit/Loss" value={dashboard.profitOrLoss} />
+          <Card title="Pending Payment" value={dashboard.pendingPayment || 0} />
+          <Card title="Expenses Today" value={dashboard.totalExpensesToday || 0} />
+        </div>
+      )}
+
+      {inventory && (
+        <div className="grid">
+          <Card title="Total Stock" value={inventory.totalStock} />
+          <Card title="Remaining Stock" value={inventory.remainingStock} />
+          <Card title="Low Stock Warning" value={inventory.lowStockWarning ? "Yes" : "No"} />
         </div>
       )}
 

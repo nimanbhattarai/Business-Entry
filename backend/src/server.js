@@ -22,6 +22,8 @@ const materialRoutes = require("./routes/material.routes");
 const dashboardRoutes = require("./routes/dashboard.routes");
 const reportRoutes = require("./routes/report.routes");
 const inventoryRoutes = require("./routes/inventory.routes");
+const masterRoutes = require("./routes/master.routes");
+const expenseRoutes = require("./routes/expenses.routes");
 
 // Local dev loads backend/.env. In Render/production, real env vars come from the platform.
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
@@ -40,6 +42,8 @@ app.use("/api/materials", materialRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/inventory", inventoryRoutes);
+app.use("/api/master", masterRoutes);
+app.use("/api/expenses", expenseRoutes);
 
 app.use((err, _req, res, _next) => {
   const status = err.status || 500;
