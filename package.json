@@ -1,0 +1,17 @@
+{
+  "name": "soletrack-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "mobile",
+    "backend",
+    "admin"
+  ],
+  "scripts": {
+    "dev": "npm run dev:backend & npm run dev:admin & npm run dev:mobile",
+    "dev:mobile": "npm --workspace mobile run dev",
+    "dev:backend": "npm --workspace backend run dev",
+    "dev:admin": "npm --workspace admin run dev",
+    "build": "npm --workspace backend run build && npm --workspace admin run build"
+  }
+}
