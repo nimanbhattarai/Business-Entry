@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { NavigationContainer, DefaultTheme, DarkTheme } from "@react-navigation/native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import {
@@ -15,6 +15,33 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const API_URL = "http://localhost:4000/api";
 const Tab = createBottomTabNavigator();
+
+const AuthContext = createContext({
+  token: "",
+  setToken: () => {},
+  logout: async () => {}
+});
+
+function useAuth() {
+  return useContext(AuthContext);
+}
+
+async function apiFetch(url, options = {}, logout) {
+  const resp = await fetch(url, options);
+  if (resp.status === 401) {
+    try {
+      const data = await resp.json();
+      if (data?.message === "Invalid token" || data?.message === "Unauthorized") {
+        await logout();
+        throw new Error("Session expired. Please login again.");
+      }
+    } catch (_e) {
+      await logout();
+      throw new Error("Session expired. Please login again.");
+    }
+  }
+  return resp;
+}
 
 function Card({ title, value, tone = "blue" }) {
   const palette = {
@@ -73,6 +100,7 @@ function WeeklyProductionChart({ data }) {
 }
 
 function DashboardScreen() {
+  const { token, logout } = useAuth();
   const [data, setData] = useState(null);
   const [report, setReport] = useState(null);
   const [inventory, setInventory] = useState(null);
@@ -80,8 +108,8 @@ function DashboardScreen() {
 
   const loadDashboard = async () => {
     const [dashboardRes, inventoryRes] = await Promise.all([
-      fetch(`${API_URL}/dashboard`, { headers: authHeaders() }),
-      fetch(`${API_URL}/inventory`, { headers: authHeaders() })
+      apiFetch(`${API_URL}/dashboard`, { headers: authHeaders(token) }, logout),
+      apiFetch(`${API_URL}/inventory`, { headers: authHeaders(token) }, logout)
     ]);
     const dashboardJson = await dashboardRes.json();
     const inventoryJson = await inventoryRes.json();
@@ -92,11 +120,11 @@ function DashboardScreen() {
   const loadReport = async (period) => {
     setLoadingReport(true);
     try {
-      const res = await fetch(`${API_URL}/reports/${period}`, { headers: authHeaders() });
+      const res = await apiFetch(`${API_URL}/reports/${period}`, { headers: authHeaders(token) }, logout);
       const json = await res.json();
       setReport(json);
-    } catch (_e) {
-      Alert.alert("Error", "Could not load report");
+    } catch (e) {
+      Alert.alert("Error", e.message || "Could not load report");
     } finally {
       setLoadingReport(false);
     }
@@ -198,6 +226,7 @@ function MaterialScreen() {
 }
 
 function SettingsScreen({ isDark, setIsDark }) {
+  const { logout } = useAuth();
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.sectionTitle}>Settings</Text>
@@ -213,11 +242,21 @@ function SettingsScreen({ isDark, setIsDark }) {
           <Switch value={isDark} onValueChange={setIsDark} />
         </View>
       </View>
+      <Pressable
+        style={[styles.button, { backgroundColor: "#0C1A33" }]}
+        onPress={() => {
+          logout();
+          Alert.alert("Logged out", "Please login again.");
+        }}
+      >
+        <Text style={styles.buttonText}>Logout</Text>
+      </Pressable>
     </ScrollView>
   );
 }
 
 function EntryForm({ endpoint, fields, title }) {
+  const { token, logout } = useAuth();
   const [form, setForm] = useState({});
 
   const totalSale = useMemo(() => {
@@ -229,16 +268,20 @@ function EntryForm({ endpoint, fields, title }) {
     try {
       const payload = { ...form };
       if (!payload.date) payload.date = new Date().toISOString();
-      const resp = await fetch(`${API_URL}/${endpoint}`, {
+      const resp = await apiFetch(
+        `${API_URL}/${endpoint}`,
+        {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders() },
+          headers: { "Content-Type": "application/json", ...authHeaders(token) },
         body: JSON.stringify(payload)
-      });
+        },
+        logout
+      );
       if (!resp.ok) throw new Error("Save failed");
       Alert.alert("Saved", `${title} saved successfully`);
       setForm({});
-    } catch (_e) {
-      Alert.alert("Error", "Could not save entry");
+    } catch (e) {
+      Alert.alert("Error", e.message || "Could not save entry");
     }
   };
 
@@ -267,8 +310,8 @@ function EntryForm({ endpoint, fields, title }) {
   );
 }
 
-function authHeaders() {
-  return { Authorization: `Bearer ${globalThis.__SOLETRACK_TOKEN || ""}` };
+function authHeaders(token) {
+  return { Authorization: `Bearer ${token || ""}` };
 }
 
 function formatLabel(field) {
@@ -292,7 +335,6 @@ function LoginScreen({ onLogin }) {
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.message || "Login failed");
       await AsyncStorage.setItem("soletrack-token", data.token);
-      globalThis.__SOLETRACK_TOKEN = data.token;
       onLogin(data.token);
     } catch (e) {
       Alert.alert("Login failed", e.message);
@@ -328,7 +370,6 @@ export default function App() {
   useEffect(() => {
     AsyncStorage.getItem("soletrack-theme").then((t) => setIsDark(t === "dark"));
     AsyncStorage.getItem("soletrack-token").then((t) => {
-      globalThis.__SOLETRACK_TOKEN = t || "";
       setToken(t || "");
     });
   }, []);
@@ -337,29 +378,36 @@ export default function App() {
     AsyncStorage.setItem("soletrack-theme", isDark ? "dark" : "light");
   }, [isDark]);
 
+  const logout = async () => {
+    await AsyncStorage.removeItem("soletrack-token");
+    setToken("");
+  };
+
   if (!token) {
     return <LoginScreen onLogin={setToken} />;
   }
 
   return (
-    <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
-      <Tab.Navigator
-        screenOptions={{
-          headerShown: false,
-          tabBarActiveTintColor: "#1C63F2",
-          tabBarInactiveTintColor: "#7E8AA8",
-          tabBarStyle: { height: 62, paddingBottom: 8, paddingTop: 6, borderTopWidth: 0, elevation: 8 }
-        }}
-      >
-        <Tab.Screen name="Dashboard" component={DashboardScreen} />
-        <Tab.Screen name="Production" component={ProductionScreen} />
-        <Tab.Screen name="Sales" component={SalesScreen} />
-        <Tab.Screen name="Materials" component={MaterialScreen} />
-        <Tab.Screen name="Settings">
-          {() => <SettingsScreen isDark={isDark} setIsDark={setIsDark} />}
-        </Tab.Screen>
-      </Tab.Navigator>
-    </NavigationContainer>
+    <AuthContext.Provider value={{ token, setToken, logout }}>
+      <NavigationContainer theme={isDark ? DarkTheme : DefaultTheme}>
+        <Tab.Navigator
+          screenOptions={{
+            headerShown: false,
+            tabBarActiveTintColor: "#1C63F2",
+            tabBarInactiveTintColor: "#7E8AA8",
+            tabBarStyle: { height: 62, paddingBottom: 8, paddingTop: 6, borderTopWidth: 0, elevation: 8 }
+          }}
+        >
+          <Tab.Screen name="Dashboard" component={DashboardScreen} />
+          <Tab.Screen name="Production" component={ProductionScreen} />
+          <Tab.Screen name="Sales" component={SalesScreen} />
+          <Tab.Screen name="Materials" component={MaterialScreen} />
+          <Tab.Screen name="Settings">
+            {() => <SettingsScreen isDark={isDark} setIsDark={setIsDark} />}
+          </Tab.Screen>
+        </Tab.Navigator>
+      </NavigationContainer>
+    </AuthContext.Provider>
   );
 }
 

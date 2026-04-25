@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-const API = "http://localhost:4000/api";
+const API = import.meta.env.VITE_API_URL || "http://localhost:4000/api";
 
 function Card({ title, value }) {
   return (
@@ -18,6 +18,23 @@ export default function App() {
   const [dashboard, setDashboard] = useState(null);
   const [report, setReport] = useState(null);
 
+  const logout = () => {
+    localStorage.removeItem("soletrack_admin_token");
+    setToken("");
+    setDashboard(null);
+    setReport(null);
+  };
+
+  const authFetch = async (url) => {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (res.status === 401) {
+      const data = await res.json().catch(() => ({}));
+      logout();
+      throw new Error(data.message || "Session expired. Please login again.");
+    }
+    return res;
+  };
+
   const login = async () => {
     const res = await fetch(`${API}/auth/login`, {
       method: "POST",
@@ -31,15 +48,23 @@ export default function App() {
   };
 
   const loadDashboard = async () => {
-    const res = await fetch(`${API}/dashboard`, { headers: { Authorization: `Bearer ${token}` } });
-    const data = await res.json();
-    setDashboard(data);
+    try {
+      const res = await authFetch(`${API}/dashboard`);
+      const data = await res.json();
+      setDashboard(data);
+    } catch (e) {
+      alert(e.message);
+    }
   };
 
   const loadReport = async (period) => {
-    const res = await fetch(`${API}/reports/${period}`, { headers: { Authorization: `Bearer ${token}` } });
-    const data = await res.json();
-    setReport(data);
+    try {
+      const res = await authFetch(`${API}/reports/${period}`);
+      const data = await res.json();
+      setReport(data);
+    } catch (e) {
+      alert(e.message);
+    }
   };
 
   if (!token) {
@@ -61,6 +86,9 @@ export default function App() {
         <button onClick={() => loadReport("daily")}>Daily Report</button>
         <button onClick={() => loadReport("weekly")}>Weekly Report</button>
         <button onClick={() => loadReport("monthly")}>Monthly Report</button>
+        <button onClick={logout} style={{ background: "#0c1a33" }}>
+          Logout
+        </button>
       </div>
 
       {dashboard && (
